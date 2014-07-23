@@ -6,6 +6,7 @@ import (
 
 	"io/ioutil"
 	"net/http"
+	"net/url"
 
 	"strconv"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	"github.com/rawoke083/ColorPrint"
 	"log"
 	"os"
+
+	"errors"
 )
 
 type TestCase struct {
@@ -31,7 +34,17 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 
 	ColorPrint.ColWrite("\n\nTEST:"+ColorPrint.ToColor(test.HttpMethod, ColorPrint.CL_LIGHT_CYAN)+" "+test.Url, ColorPrint.CL_WHITE)
 
-	resp, err := http.Get(test.Url)
+	err := errors.New("")
+	resp := new(http.Response)
+
+	if test.HttpMethod == "POST" {
+		u, _ := url.Parse(test.Url)
+		ColorPrint.ColWrite("  ::: ARGS:"+u.RawQuery, ColorPrint.CL_WHITE)
+		q, _ := url.ParseQuery(u.RawQuery)
+		resp, err = http.PostForm(test.Url, q)
+	} else {
+		resp, err = http.Get(test.Url)
+	}
 	if err != nil {
 		// handle error
 		ColorPrint.ColWrite(fmt.Sprintf("\n\n=====>HTTP-ERROR:%s", test.Url), ColorPrint.CL_RED)
@@ -43,22 +56,23 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 
 	http_code := strconv.Itoa(resp.StatusCode)
 
+	body, _ := ioutil.ReadAll(resp.Body)
+	s := string(body)
+
 	if strings.TrimSpace(test.HttpReturnCode) != http_code {
 
 		test.Pass = false
+		//ColorPrint.ColWrite("\n=>FAILED  - HttpCode Excepted |"+test.HttpReturnCode+"| but got |"+http_code+"|"+s, ColorPrint.CL_RED)
 		ColorPrint.ColWrite("\n=>FAILED  - HttpCode Excepted |"+test.HttpReturnCode+"| but got |"+http_code+"|", ColorPrint.CL_RED)
 		return false
 	}
 
 	if len(test.ResponseTXTCheck) > 1 {
 
-		body, _ := ioutil.ReadAll(resp.Body)
-		s := string(body)
-
 		if !strings.Contains(s, test.ResponseTXTCheck) {
 			test.Pass = false
 
-			ColorPrint.ColWrite("\n=>FAILED  - ResponseText ("+test.ResponseTXTCheck+") not found. ", ColorPrint.CL_RED)
+			ColorPrint.ColWrite("\n=>FAILED  - ResponseText ("+test.ResponseTXTCheck+") not found. "+s, ColorPrint.CL_RED)
 			return false
 
 		}
