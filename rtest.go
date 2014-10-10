@@ -124,6 +124,10 @@ func LoadTest(filename string) []TestCase {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 
+		if strings.HasPrefix(scanner.Text(), "#") {
+			continue
+		}
+
 		fields := strings.Split(scanner.Text(), "|")
 		field_count := len(fields)
 
@@ -147,7 +151,7 @@ func LoadTest(filename string) []TestCase {
 }
 
 func printUsage() {
-	
+
 	ColorPrint.ColWrite("Usage:\n", ColorPrint.CL_WHITE)
 	ColorPrint.ColWrite("\nrtest filename=<url-list-file> [-DStringToReplace=NewString] [-DMoreStringToReplace=MoreNewString]\n\n", ColorPrint.CL_WHITE)
 }
