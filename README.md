@@ -9,7 +9,7 @@ Quick and dirty way to test your API(rest)
 
 File format
 ===========
-<http-method>|url|expected http return code|[optional text in response body]
+http-method | url | expected http return code | [optional text in response body]
 
 get|http://myrestapi.com/user?id=123|200
 
