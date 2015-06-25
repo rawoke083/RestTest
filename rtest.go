@@ -18,10 +18,12 @@ import (
 	"errors"
 )
 
+// TestCase holds the HTTP method, URL to call,
+// return code, what text to check on return, and pass/fail
 type TestCase struct {
-	HttpMethod       string
-	Url              string
-	HttpReturnCode   string
+	HTTPMethod       string
+	URL              string
+	HTTPReturnCode   string
 	ResponseTXTCheck string
 	Pass             bool
 }
@@ -29,28 +31,50 @@ type TestCase struct {
 func (test *TestCase) runATest(mparams map[string]string) bool {
 
 	for i, k := range mparams {
-		test.Url = strings.Replace(test.Url, i, k, -1)
+		test.URL = strings.Replace(test.URL, i, k, -1)
 	}
 
-	ColorPrint.ColWrite("\n\nTEST:"+ColorPrint.ToColor(test.HttpMethod, ColorPrint.CL_LIGHT_CYAN)+" "+test.Url, ColorPrint.CL_WHITE)
+	ColorPrint.ColWrite("\n\nTEST:"+ColorPrint.ToColor(test.HTTPMethod, ColorPrint.CL_LIGHT_CYAN)+" "+test.URL, ColorPrint.CL_WHITE)
 
 	err := errors.New("")
 	resp := new(http.Response)
+	req := new(http.Request)
 
-	if test.HttpMethod == "POST" {
-		u, _ := url.Parse(test.Url)
-		ColorPrint.ColWrite("  ::: ARGS:"+u.RawQuery, ColorPrint.CL_WHITE)
-		q, _ := url.ParseQuery(u.RawQuery)
-		resp, err = http.PostForm(test.Url, q)
-	} else {
-		resp, err = http.Get(test.Url)
+	// Parse URL and Query
+	u, _ := url.Parse(test.URL)
+	//q, _ := url.ParseQuery(u.RawQuery)
+	c := &http.Client{}
+
+	switch test.HTTPMethod {
+	case "GET":
+		req, err = http.NewRequest("GET", test.URL, nil)
+		if err != nil {
+			return false
+		}
+	case "POST":
+		req, err = http.NewRequest("POST", test.URL, strings.NewReader(u.RawQuery))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
+		if err != nil {
+			return false
+		}
+	case "PATCH":
+		req, err = http.NewRequest("PATCH", test.URL, strings.NewReader(u.RawQuery))
+		if err != nil {
+			return false
+		}
+	case "DELETE":
+		req, err = http.NewRequest("DELETE", test.URL, strings.NewReader(u.RawQuery))
+		if err != nil {
+			return false
+		}
 	}
-	if err != nil {
+
+	if resp, err = c.Do(req); err != nil {
 		// handle error
-		ColorPrint.ColWrite(fmt.Sprintf("\n\n=====>HTTP-ERROR:%s", test.Url), ColorPrint.CL_RED)
+		ColorPrint.ColWrite(fmt.Sprintf("\n\n=====>HTTP-ERROR:%s", test.URL), ColorPrint.CL_RED)
 		return false
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 
 	test.Pass = true
 
@@ -59,11 +83,10 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 	body, _ := ioutil.ReadAll(resp.Body)
 	s := string(body)
 
-	if strings.TrimSpace(test.HttpReturnCode) != http_code {
+	if strings.TrimSpace(test.HTTPReturnCode) != http_code {
 
 		test.Pass = false
-		//ColorPrint.ColWrite("\n=>FAILED  - HttpCode Excepted |"+test.HttpReturnCode+"| but got |"+http_code+"|"+s, ColorPrint.CL_RED)
-		ColorPrint.ColWrite("\n=>FAILED  - HttpCode Excepted |"+test.HttpReturnCode+"| but got |"+http_code+"|", ColorPrint.CL_RED)
+		ColorPrint.ColWrite("\n=>FAILED  - HttpCode Excepted |"+test.HTTPReturnCode+"| but got |"+http_code+"|", ColorPrint.CL_RED)
 		return false
 	}
 
@@ -105,9 +128,9 @@ func runTestSuite(testCases []TestCase, mparams map[string]string) int {
 	ColorPrint.ColWrite(s_total_test_failed, ColorPrint.CL_RED)
 
 	return (testRunCount - testOKCount)
-
 }
 
+// LoadTest loads test data from test specification files
 func LoadTest(filename string) []TestCase {
 
 	//	valid_http_methods := []string{"GET", "POST", "PUT", "DELETE"}
@@ -135,9 +158,9 @@ func LoadTest(filename string) []TestCase {
 			continue
 		}
 
-		testCaseList[testCount].HttpMethod = fields[0]
-		testCaseList[testCount].Url = fields[1]
-		testCaseList[testCount].HttpReturnCode = fields[2]
+		testCaseList[testCount].HTTPMethod = fields[0]
+		testCaseList[testCount].URL = fields[1]
+		testCaseList[testCount].HTTPReturnCode = fields[2]
 		if field_count > 3 {
 
 			testCaseList[testCount].ResponseTXTCheck = fields[3]
@@ -147,11 +170,9 @@ func LoadTest(filename string) []TestCase {
 	} //for scanner
 
 	return testCaseList[0:testCount]
-
 }
 
 func printUsage() {
-
 	ColorPrint.ColWrite("Usage:\n", ColorPrint.CL_WHITE)
 	ColorPrint.ColWrite("\nrtest filename=<url-list-file> [-DStringToReplace=NewString] [-DMoreStringToReplace=MoreNewString]\n\n", ColorPrint.CL_WHITE)
 }
@@ -160,13 +181,10 @@ func main() {
 	ColorPrint.ColWrite("\n###### REST Test ########\n", ColorPrint.CL_YELLOW)
 
 	var mparams = make(map[string]string)
-
 	var fileName string
 
 	for i := range os.Args {
-
 		if strings.Contains(os.Args[i], "-D") {
-
 			fields := strings.Split(strings.Replace(os.Args[i], "-D", "", -1), "=")
 			mparams[fields[0]] = fields[1]
 		}
@@ -175,12 +193,10 @@ func main() {
 			fields := strings.Split(os.Args[i], "=")
 			fileName = fields[1]
 		}
-
 	}
 
 	if len(fileName) < 1 {
-
-		fmt.Println("\nError:No filename\n")
+		fmt.Println("\nError:No filename")
 		printUsage()
 		os.Exit(1)
 	}
