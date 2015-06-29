@@ -74,7 +74,6 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 		ColorPrint.ColWrite(fmt.Sprintf("\n\n=====>HTTP-ERROR:%s", test.URL), ColorPrint.CL_RED)
 		return false
 	}
-	resp.Body.Close()
 
 	test.Pass = true
 
@@ -82,6 +81,7 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 
 	body, _ := ioutil.ReadAll(resp.Body)
 	s := string(body)
+	resp.Body.Close()
 
 	if strings.TrimSpace(test.HTTPReturnCode) != http_code {
 
