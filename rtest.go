@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"flag"
 	"strconv"
 	"strings"
 
@@ -18,6 +19,12 @@ import (
 	"errors"
 )
 
+type arrayFlags []string
+
+var Aliases arrayFlags
+var Headers arrayFlags
+var fileName string
+
 // TestCase holds the HTTP method, URL to call,
 // return code, what text to check on return, and pass/fail
 type TestCase struct {
@@ -26,6 +33,13 @@ type TestCase struct {
 	HTTPReturnCode   string
 	ResponseTXTCheck string
 	Pass             bool
+}
+
+func setMultipleHeaders(req http.Request) {
+	for _, val := range Headers {
+		fields := strings.Split(val, ":")
+		req.Header.Set(fields[0], fields[1])
+	}
 }
 
 func (test *TestCase) runATest(mparams map[string]string) bool {
@@ -68,6 +82,8 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 			return false
 		}
 	}
+
+	setMultipleHeaders(*req)
 
 	if resp, err = c.Do(req); err != nil {
 		// handle error
@@ -174,25 +190,33 @@ func LoadTest(filename string) []TestCase {
 
 func printUsage() {
 	ColorPrint.ColWrite("Usage:\n", ColorPrint.CL_WHITE)
-	ColorPrint.ColWrite("\nrtest filename=<url-list-file> [-DStringToReplace=NewString] [-DMoreStringToReplace=MoreNewString]\n\n", ColorPrint.CL_WHITE)
+	ColorPrint.ColWrite("\nrtest filename=<url-list-file> [-D search=replace..]\n\n", ColorPrint.CL_WHITE)
+}
+
+func (i *arrayFlags) String() string {
+	return "my string representation"
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+func init() {
+	flag.Var(&Aliases, "D", "Replace text with some other text")
+	flag.Var(&Headers, "H", "Request headers")
+	flag.StringVar(&fileName, "filename", "", "File containing list of test rules")
+
+	flag.Parse()
 }
 
 func main() {
 	ColorPrint.ColWrite("\n###### REST Test ########\n", ColorPrint.CL_YELLOW)
 
 	var mparams = make(map[string]string)
-	var fileName string
 
-	for i := range os.Args {
-		if strings.Contains(os.Args[i], "-D") {
-			fields := strings.Split(strings.Replace(os.Args[i], "-D", "", -1), "=")
-			mparams[fields[0]] = fields[1]
-		}
-
-		if strings.Contains(os.Args[i], "filename=") {
-			fields := strings.Split(os.Args[i], "=")
-			fileName = fields[1]
-		}
+	for i := range Aliases {
+		fields := strings.Split(Aliases[i], "=")
+		mparams[fields[0]] = fields[1]
 	}
 
 	if len(fileName) < 1 {
