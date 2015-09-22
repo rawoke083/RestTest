@@ -4,10 +4,10 @@ import (
 	"bufio"
 	"fmt"
 
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"encoding/json"
 
 	"flag"
 	"strconv"
@@ -35,7 +35,7 @@ type TestCase struct {
 	URL              string
 	HTTPReturnCode   string
 	ResponseTXTCheck string
-	CheckVar		string
+	CheckVar         string
 	Pass             bool
 }
 
@@ -151,7 +151,6 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 			varLookupAndSet(d, checkVar)
 		}
 	}
-
 
 	if strings.TrimSpace(test.HTTPReturnCode) != http_code {
 
