@@ -36,6 +36,7 @@ type TestCase struct {
 	HTTPReturnCode   string
 	ResponseTXTCheck string
 	CheckVar         string
+	Headers			string
 	Pass             bool
 }
 
@@ -46,6 +47,16 @@ func setMultipleHeaders(req http.Request) {
 	}
 }
 
+func setHeader(req http.Request, header string) {
+	for i, k := range haveVariables {
+		if strings.Contains(header, "%"+i+"%") {
+			header = strings.Replace(header, "%"+i+"%", k, -1)
+		}
+	}
+	fields := strings.Split(header, ":")
+	req.Header.Set(fields[0], fields[1])
+}
+
 func varLookupAndSet(i interface{}, checkvar []string) bool {
 	var varName string
 	if len(checkvar) > 1 {
@@ -54,18 +65,25 @@ func varLookupAndSet(i interface{}, checkvar []string) bool {
 		varName = checkvar[0]
 	}
 
-	m := i.(map[string]interface{})
-	for k, v := range m {
-		switch vv := v.(type) {
-		case string:
-			if k == checkvar[0] {
-				haveVariables[varName] = vv
-				return true
-			}
-		case []interface{}:
-			for _, u := range vv {
-				res := varLookupAndSet(u, checkvar)
-				if res == true {
+	m, ok := i.(map[string]interface{})
+	if ok {
+		for k, v := range m {
+			switch vv := v.(type) {
+			case string:
+				if k == checkvar[0] {
+					haveVariables[varName] = vv
+					return true
+				}
+			case []interface{}:
+				for _, u := range vv {
+					res := varLookupAndSet(u, checkvar)
+					if res {
+						return true
+					}
+				}
+			case interface{}:
+				res := varLookupAndSet(vv, checkvar)
+				if res {
 					return true
 				}
 			}
@@ -122,6 +140,12 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 	}
 
 	setMultipleHeaders(*req)
+	if len(test.Headers) > 1 {
+		h := strings.Split(test.Headers, ",")
+		for _, v := range h {
+			setHeader(*req, v)
+		}
+	}
 
 	if resp, err = c.Do(req); err != nil {
 		// handle error
@@ -233,6 +257,9 @@ func LoadTest(filename string) []TestCase {
 		}
 		if field_count > 4 {
 			testCaseList[testCount].CheckVar = fields[4]
+		}
+		if field_count > 5 {
+			testCaseList[testCount].Headers = fields[5]
 		}
 		testCount++
 
