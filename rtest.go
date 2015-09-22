@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"encoding/json"
 
 	"flag"
 	"strconv"
@@ -25,6 +26,8 @@ var Aliases arrayFlags
 var Headers arrayFlags
 var fileName string
 
+var haveVariables = map[string]string{}
+
 // TestCase holds the HTTP method, URL to call,
 // return code, what text to check on return, and pass/fail
 type TestCase struct {
@@ -32,6 +35,7 @@ type TestCase struct {
 	URL              string
 	HTTPReturnCode   string
 	ResponseTXTCheck string
+	CheckVar		string
 	Pass             bool
 }
 
@@ -42,10 +46,45 @@ func setMultipleHeaders(req http.Request) {
 	}
 }
 
+func varLookupAndSet(i interface{}, checkvar []string) bool {
+	var varName string
+	if len(checkvar) > 1 {
+		varName = checkvar[1]
+	} else {
+		varName = checkvar[0]
+	}
+
+	m := i.(map[string]interface{})
+	for k, v := range m {
+		switch vv := v.(type) {
+		case string:
+			if k == checkvar[0] {
+				haveVariables[varName] = vv
+				return true
+			}
+		case []interface{}:
+			for _, u := range vv {
+				res := varLookupAndSet(u, checkvar)
+				if res == true {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
 func (test *TestCase) runATest(mparams map[string]string) bool {
 
 	for i, k := range mparams {
 		test.URL = strings.Replace(test.URL, i, k, -1)
+	}
+
+	for i, k := range haveVariables {
+		if strings.Contains(test.URL, "%"+i+"%") {
+			test.URL = strings.Replace(test.URL, "%"+i+"%", k, -1)
+		}
 	}
 
 	ColorPrint.ColWrite("\n\nTEST:"+ColorPrint.ToColor(test.HTTPMethod, ColorPrint.CL_LIGHT_CYAN)+" "+test.URL, ColorPrint.CL_WHITE)
@@ -56,7 +95,6 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 
 	// Parse URL and Query
 	u, _ := url.Parse(test.URL)
-	//q, _ := url.ParseQuery(u.RawQuery)
 	c := &http.Client{}
 
 	switch test.HTTPMethod {
@@ -90,7 +128,6 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 		ColorPrint.ColWrite(fmt.Sprintf("\n\n=====>HTTP-ERROR:%s", test.URL), ColorPrint.CL_RED)
 		return false
 	}
-
 	test.Pass = true
 
 	http_code := strconv.Itoa(resp.StatusCode)
@@ -99,10 +136,27 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 	s := string(body)
 	resp.Body.Close()
 
+	ctype := resp.Header.Get("Content-Type")
+	switch ctype {
+	case "application/javascript":
+		var d interface{}
+		err := json.Unmarshal(body, &d)
+		if err != nil {
+			test.Pass = false
+			ColorPrint.ColWrite("\n=>FAILED - Expected response application/javascript cannot be decoded", ColorPrint.CL_RED)
+			break
+		}
+		if len(test.CheckVar) > 1 {
+			checkVar := strings.Split(test.CheckVar, "=")
+			varLookupAndSet(d, checkVar)
+		}
+	}
+
+
 	if strings.TrimSpace(test.HTTPReturnCode) != http_code {
 
 		test.Pass = false
-		ColorPrint.ColWrite("\n=>FAILED  - HttpCode Excepted |"+test.HTTPReturnCode+"| but got |"+http_code+"|", ColorPrint.CL_RED)
+		ColorPrint.ColWrite("\n=>FAILED - HttpCode Excepted |"+test.HTTPReturnCode+"| but got |"+http_code+"|", ColorPrint.CL_RED)
 		return false
 	}
 
@@ -111,7 +165,7 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 		if !strings.Contains(s, test.ResponseTXTCheck) {
 			test.Pass = false
 
-			ColorPrint.ColWrite("\n=>FAILED  - ResponseText ("+test.ResponseTXTCheck+") not found. "+s, ColorPrint.CL_RED)
+			ColorPrint.ColWrite("\n=>FAILED - ResponseText ("+test.ResponseTXTCheck+") not found. "+s, ColorPrint.CL_RED)
 			return false
 
 		}
@@ -149,8 +203,6 @@ func runTestSuite(testCases []TestCase, mparams map[string]string) int {
 // LoadTest loads test data from test specification files
 func LoadTest(filename string) []TestCase {
 
-	//	valid_http_methods := []string{"GET", "POST", "PUT", "DELETE"}
-
 	f, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -178,8 +230,10 @@ func LoadTest(filename string) []TestCase {
 		testCaseList[testCount].URL = fields[1]
 		testCaseList[testCount].HTTPReturnCode = fields[2]
 		if field_count > 3 {
-
 			testCaseList[testCount].ResponseTXTCheck = fields[3]
+		}
+		if field_count > 4 {
+			testCaseList[testCount].CheckVar = fields[4]
 		}
 		testCount++
 
