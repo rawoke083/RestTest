@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"bytes"
 	"github.com/rawoke083/ColorPrint"
 	"log"
 	"os"
@@ -35,9 +36,54 @@ type TestCase struct {
 	URL              string
 	HTTPReturnCode   string
 	ResponseTXTCheck string
-	CheckVar         string
-	Headers			string
+	storeVar         string
+	Headers          string
 	Pass             bool
+}
+
+func getKeyType(keyname string, kn string, data interface{}) (bool, interface{}) {
+	switch vv := data.(type) {
+
+	case int, float64, string:
+		if kn == keyname {
+			return true, data
+		}
+	case json.Number:
+		if kn == keyname {
+			val, err := data.(json.Number).Int64()
+			if err != nil {
+				return true, nil
+			}
+			return true, val
+		}
+	case []interface{}:
+		for _, u := range vv {
+			return getKeyType(keyname, kn, u)
+		}
+	case map[string]interface{}:
+		if kn == keyname {
+			return true, data
+		}
+
+		for knn, ov := range vv {
+			return getKeyType(keyname, knn, ov)
+		}
+	default:
+		return false, 0
+	}
+
+	return false, 0
+}
+
+func getKey(keyname string, data map[string]interface{}) (bool, interface{}) {
+	for k, v := range data {
+		ok, x := getKeyType(keyname, k, v)
+		if ok {
+			return true, x
+		}
+	}
+
+	return false, nil
 }
 
 func setMultipleHeaders(req http.Request) {
@@ -55,42 +101,6 @@ func setHeader(req http.Request, header string) {
 	}
 	fields := strings.Split(header, ":")
 	req.Header.Set(fields[0], fields[1])
-}
-
-func varLookupAndSet(i interface{}, checkvar []string) bool {
-	var varName string
-	if len(checkvar) > 1 {
-		varName = checkvar[1]
-	} else {
-		varName = checkvar[0]
-	}
-
-	m, ok := i.(map[string]interface{})
-	if ok {
-		for k, v := range m {
-			switch vv := v.(type) {
-			case string:
-				if k == checkvar[0] {
-					haveVariables[varName] = vv
-					return true
-				}
-			case []interface{}:
-				for _, u := range vv {
-					res := varLookupAndSet(u, checkvar)
-					if res {
-						return true
-					}
-				}
-			case interface{}:
-				res := varLookupAndSet(vv, checkvar)
-				if res {
-					return true
-				}
-			}
-		}
-	}
-
-	return false
 }
 
 func (test *TestCase) runATest(mparams map[string]string) bool {
@@ -148,7 +158,6 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 	}
 
 	if resp, err = c.Do(req); err != nil {
-		// handle error
 		ColorPrint.ColWrite(fmt.Sprintf("\n\n=====>HTTP-ERROR:%s", test.URL), ColorPrint.CL_RED)
 		return false
 	}
@@ -158,21 +167,41 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 
 	body, _ := ioutil.ReadAll(resp.Body)
 	s := string(body)
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	ctype := resp.Header.Get("Content-Type")
 	switch ctype {
 	case "application/javascript":
-		var d interface{}
-		err := json.Unmarshal(body, &d)
+
+		data := json.NewDecoder(bytes.NewReader(body))
+		data.UseNumber()
+
+		var d map[string]interface{}
+		err := data.Decode(&d)
 		if err != nil {
 			test.Pass = false
 			ColorPrint.ColWrite("\n=>FAILED - Expected response application/javascript cannot be decoded", ColorPrint.CL_RED)
 			break
 		}
-		if len(test.CheckVar) > 1 {
-			checkVar := strings.Split(test.CheckVar, "=")
-			varLookupAndSet(d, checkVar)
+		if len(test.storeVar) > 1 {
+			checkVar := strings.Split(test.storeVar, "=")
+			ok, result := getKey(checkVar[0], d)
+			if ok {
+				var vvalue string
+				switch vv := result.(type) {
+				case float64:
+					vvalue = fmt.Sprintf("%f", vv)
+				case string:
+					vvalue = vv
+				case int64:
+					vvalue = strconv.FormatInt(vv, 10)
+				}
+				if len(checkVar) > 1 {
+					haveVariables[checkVar[1]] = vvalue
+				} else {
+					haveVariables[checkVar[0]] = vvalue
+				}
+			}
 		}
 	}
 
@@ -256,7 +285,7 @@ func LoadTest(filename string) []TestCase {
 			testCaseList[testCount].ResponseTXTCheck = fields[3]
 		}
 		if field_count > 4 {
-			testCaseList[testCount].CheckVar = fields[4]
+			testCaseList[testCount].storeVar = fields[4]
 		}
 		if field_count > 5 {
 			testCaseList[testCount].Headers = fields[5]
