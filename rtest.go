@@ -26,8 +26,7 @@ type arrayFlags []string
 var Aliases arrayFlags
 var Headers arrayFlags
 var fileName string
-
-var haveVariables = map[string]string{}
+var haveVariables = make(map[string]string)
 
 // TestCase holds the HTTP method, URL to call,
 // return code, what text to check on return, and pass/fail
@@ -86,6 +85,12 @@ func getKey(keyname string, data map[string]interface{}) (bool, interface{}) {
 	return false, nil
 }
 
+func setKey(haveVariables map[string]string, keyname, value string) {
+	if _, ok := haveVariables[keyname]; !ok {
+		haveVariables[keyname] = value
+	}
+}
+
 func setMultipleHeaders(req http.Request) {
 	for _, val := range Headers {
 		fields := strings.Split(val, ":")
@@ -100,6 +105,7 @@ func setHeader(req http.Request, header string) {
 		}
 	}
 	fields := strings.Split(header, ":")
+
 	req.Header.Set(fields[0], fields[1])
 }
 
@@ -108,7 +114,6 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 	for i, k := range mparams {
 		test.URL = strings.Replace(test.URL, i, k, -1)
 	}
-
 	for i, k := range haveVariables {
 		if strings.Contains(test.URL, "%"+i+"%") {
 			test.URL = strings.Replace(test.URL, "%"+i+"%", k, -1)
@@ -185,6 +190,7 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 		}
 		if len(test.storeVar) > 1 {
 			checkVar := strings.Split(test.storeVar, "=")
+
 			ok, result := getKey(checkVar[0], d)
 			if ok {
 				var vvalue string
@@ -197,9 +203,9 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 					vvalue = strconv.FormatInt(vv, 10)
 				}
 				if len(checkVar) > 1 {
-					haveVariables[checkVar[1]] = vvalue
+					setKey(haveVariables, checkVar[1], vvalue)
 				} else {
-					haveVariables[checkVar[0]] = vvalue
+					setKey(haveVariables, checkVar[0], vvalue)
 				}
 			}
 		}
