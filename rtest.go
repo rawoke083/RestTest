@@ -22,11 +22,18 @@ import (
 )
 
 type arrayFlags []string
+type varMap map[string]string
 
 var Aliases arrayFlags
 var Headers arrayFlags
 var fileName string
-var haveVariables = make(map[string]string)
+
+type haveVar struct {
+	key	string
+	val string
+}
+
+var haveVariables []haveVar
 
 // TestCase holds the HTTP method, URL to call,
 // return code, what text to check on return, and pass/fail
@@ -85,9 +92,20 @@ func getKey(keyname string, data map[string]interface{}) (bool, interface{}) {
 	return false, nil
 }
 
-func setKey(haveVariables map[string]string, keyname, value string) {
-	if _, ok := haveVariables[keyname]; !ok {
-		haveVariables[keyname] = value
+func setKey(keyname, value string) {
+	found := false
+	for _, variable := range haveVariables {
+		if variable.key == keyname {
+			found = true
+		}
+	}
+	
+	if (!found) {
+		var variable haveVar
+		variable.key = keyname
+		variable.val = value
+		
+		haveVariables = append(haveVariables, variable)
 	}
 }
 
@@ -99,9 +117,9 @@ func setMultipleHeaders(req http.Request) {
 }
 
 func setHeader(req http.Request, header string) {
-	for i, k := range haveVariables {
-		if strings.Contains(header, "%"+i+"%") {
-			header = strings.Replace(header, "%"+i+"%", k, -1)
+	for _, variable := range haveVariables {
+		if strings.Contains(header, "%"+variable.key+"%") {
+			header = strings.Replace(header, "%"+variable.key+"%", variable.val, -1)
 		}
 	}
 	fields := strings.Split(header, ":")
@@ -114,13 +132,12 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 	for i, k := range mparams {
 		test.URL = strings.Replace(test.URL, i, k, -1)
 	}
-	for i, k := range haveVariables {
-		if strings.Contains(test.URL, "%"+i+"%") {
-			test.URL = strings.Replace(test.URL, "%"+i+"%", k, -1)
+	
+	for _, variable := range haveVariables {
+		if strings.Contains(test.URL, "%"+variable.key+"%") {
+			test.URL = strings.Replace(test.URL, "%"+variable.key+"%", variable.val, -1)
 		}
 	}
-
-	ColorPrint.ColWrite("\n\nTEST:"+ColorPrint.ToColor(test.HTTPMethod, ColorPrint.CL_LIGHT_CYAN)+" "+test.URL, ColorPrint.CL_WHITE)
 
 	err := errors.New("")
 	resp := new(http.Response)
@@ -133,22 +150,28 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 	switch test.HTTPMethod {
 	case "GET":
 		req, err = http.NewRequest("GET", test.URL, nil)
+		ColorPrint.ColWrite("\n\nTEST:"+ColorPrint.ToColor(test.HTTPMethod, ColorPrint.CL_LIGHT_CYAN)+" "+test.URL, ColorPrint.CL_WHITE)
 		if err != nil {
 			return false
 		}
 	case "POST":
-		req, err = http.NewRequest("POST", test.URL, strings.NewReader(u.RawQuery))
+		urlNoQuery := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+		req, err = http.NewRequest("POST", urlNoQuery, strings.NewReader(u.RawQuery))
+		ColorPrint.ColWrite("\n\nTEST:"+ColorPrint.ToColor(test.HTTPMethod, ColorPrint.CL_LIGHT_CYAN)+" "+urlNoQuery, ColorPrint.CL_WHITE)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
 		if err != nil {
 			return false
 		}
 	case "PATCH":
-		req, err = http.NewRequest("PATCH", test.URL, strings.NewReader(u.RawQuery))
+		urlNoQuery := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, u.Path)
+		req, err = http.NewRequest("PATCH", urlNoQuery, strings.NewReader(u.RawQuery))
+		ColorPrint.ColWrite("\n\nTEST:"+ColorPrint.ToColor(test.HTTPMethod, ColorPrint.CL_LIGHT_CYAN)+" "+urlNoQuery, ColorPrint.CL_WHITE)
 		if err != nil {
 			return false
 		}
 	case "DELETE":
 		req, err = http.NewRequest("DELETE", test.URL, strings.NewReader(u.RawQuery))
+		ColorPrint.ColWrite("\n\nTEST:"+ColorPrint.ToColor(test.HTTPMethod, ColorPrint.CL_LIGHT_CYAN)+" "+test.URL, ColorPrint.CL_WHITE)
 		if err != nil {
 			return false
 		}
@@ -203,9 +226,9 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 					vvalue = strconv.FormatInt(vv, 10)
 				}
 				if len(checkVar) > 1 {
-					setKey(haveVariables, checkVar[1], vvalue)
+					setKey(checkVar[1], vvalue)
 				} else {
-					setKey(haveVariables, checkVar[0], vvalue)
+					setKey(checkVar[0], vvalue)
 				}
 			}
 		}
