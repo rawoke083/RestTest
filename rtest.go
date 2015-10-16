@@ -29,8 +29,8 @@ var Headers arrayFlags
 var fileName string
 
 type haveVar struct {
-	key	string
-	val string
+	Key	string
+	Val string
 }
 
 var haveVariables []haveVar
@@ -42,7 +42,7 @@ type TestCase struct {
 	URL              string
 	HTTPReturnCode   string
 	ResponseTXTCheck string
-	storeVar         string
+	Storevar         string
 	Headers          string
 	Pass             bool
 }
@@ -95,15 +95,15 @@ func getKey(keyname string, data map[string]interface{}) (bool, interface{}) {
 func setKey(keyname, value string) {
 	found := false
 	for _, variable := range haveVariables {
-		if variable.key == keyname {
+		if variable.Key == keyname {
 			found = true
 		}
 	}
 	
 	if (!found) {
 		var variable haveVar
-		variable.key = keyname
-		variable.val = value
+		variable.Key = keyname
+		variable.Val = value
 		
 		haveVariables = append(haveVariables, variable)
 	}
@@ -118,8 +118,8 @@ func setMultipleHeaders(req http.Request) {
 
 func setHeader(req http.Request, header string) {
 	for _, variable := range haveVariables {
-		if strings.Contains(header, "%"+variable.key+"%") {
-			header = strings.Replace(header, "%"+variable.key+"%", variable.val, -1)
+		if strings.Contains(header, "%"+variable.Key+"%") {
+			header = strings.Replace(header, "%"+variable.Key+"%", variable.Val, -1)
 		}
 	}
 	fields := strings.Split(header, ":")
@@ -134,8 +134,8 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 	}
 	
 	for _, variable := range haveVariables {
-		if strings.Contains(test.URL, "%"+variable.key+"%") {
-			test.URL = strings.Replace(test.URL, "%"+variable.key+"%", variable.val, -1)
+		if strings.Contains(test.URL, "%"+variable.Key+"%") {
+			test.URL = strings.Replace(test.URL, "%"+variable.Key+"%", variable.Val, -1)
 		}
 	}
 
@@ -211,8 +211,8 @@ func (test *TestCase) runATest(mparams map[string]string) bool {
 			ColorPrint.ColWrite("\n=>FAILED - Expected response application/javascript cannot be decoded", ColorPrint.CL_RED)
 			break
 		}
-		if len(test.storeVar) > 1 {
-			checkVar := strings.Split(test.storeVar, "=")
+		if len(test.Storevar) > 1 {
+			checkVar := strings.Split(test.Storevar, "=")
 
 			ok, result := getKey(checkVar[0], d)
 			if ok {
@@ -314,7 +314,7 @@ func LoadTest(filename string) []TestCase {
 			testCaseList[testCount].ResponseTXTCheck = fields[3]
 		}
 		if field_count > 4 {
-			testCaseList[testCount].storeVar = fields[4]
+			testCaseList[testCount].Storevar = fields[4]
 		}
 		if field_count > 5 {
 			testCaseList[testCount].Headers = fields[5]
