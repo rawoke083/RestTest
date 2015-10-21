@@ -50,7 +50,7 @@ type TestCase struct {
 func getKeyType(keyname string, kn string, data interface{}) (bool, interface{}) {
 	switch vv := data.(type) {
 
-	case int, float64, string:
+	case int, float64, string,bool,nil:
 		if kn == keyname {
 			return true, data
 		}
@@ -72,8 +72,13 @@ func getKeyType(keyname string, kn string, data interface{}) (bool, interface{})
 		}
 
 		for knn, ov := range vv {
-			return getKeyType(keyname, knn, ov)
+			found_sub,sub_data:= getKeyType(keyname, knn, ov)
+			if(found_sub) {
+				return true,sub_data
+			}			
 		}
+		return false,nil
+		
 	default:
 		return false, 0
 	}
